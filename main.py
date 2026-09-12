@@ -8,10 +8,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 # --- НАСТРОЙКИ ---
-# Токен берем из переменных окружения (это безопасно и решит ошибку Token is invalid)
+# Токен берем из переменных окружения (это решит ошибку Token is invalid)
 BOT_TOKEN = os.getenv("8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg")
+
 # ВАЖНО: Замените на ваш цифровой ID (можно узнать у бота @userinfobot)
 ADMIN_ID = 8764200820 
+
 # Юзернейм канала (без @), куда будут публиковаться посты
 CHANNEL_USERNAME = "VNESHKABRATSK"
 
@@ -19,8 +21,11 @@ CHANNEL_USERNAME = "VNESHKABRATSK"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Инициализация бота и диспетчера
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
+if not BOT_TOKEN:
+    logging.error("❌ ОШИБКА: Переменная окружения BOT_TOKEN не найдена! Бот не запустится.")
+else:
+    bot = Bot(token=BOT_TOKEN)
+    dp = Dispatcher(storage=MemoryStorage())
 
 # --- МАШИНА СОСТОЯНИЙ (FSM) ---
 class PostCreation(StatesGroup):
@@ -80,11 +85,12 @@ async def process_caption(message: types.Message, state: FSMContext):
 
     try:
         # Отправляем пост админу с кнопками
+        # Используем ID сообщения юзера как ID поста для простоты
         sent_msg = await bot.send_photo(
             chat_id=ADMIN_ID,
             photo=photo_file_id,
             caption=draft_text,
-            reply_markup=get_admin_review_keyboard(message.message_id), # Используем ID сообщения юзера как ID поста
+            reply_markup=get_admin_review_keyboard(message.message_id), 
             parse_mode="HTML"
         )
         await message.answer("✅ Ваш пост отправлен на модерацию администратору.")
@@ -114,16 +120,11 @@ async def approve_post(callback: types.CallbackQuery):
         return
 
     try:
-        # ИСПРАВЛЕНИЕ ОШИБКИ: берем часть после разделителя и конвертируем в int
-        # callback.data выглядит как "approve_12345", split("_", 1) вернет ["approve", "12345"]
-        post_id = int(callback.data.split("_", 1)) [1](https://tr-page.yandex.ru/translate?lang=en-ru&url=https%3A%2F%2Fwww.geeksforgeeks.org%2Fpython%2Fkeyboard-buttons-in-telegram-bot-using-python%2F)
+        # ИСПРАВЛЕНИЕ ОШИБКИ: берем элемент с индексом 1 из списка split
+        # callback.data выглядит как "approve_12345", split возвращает ["approve", "12345"]
+        post_id = int(callback.data.split("_", 1))
         logging.info(f"Одобрение поста ID: {post_id}")
 
-        # Получаем оригинальное сообщение (текст и фото) из истории, чтобы переслать его
-        # Примечание: В простой реализации без БД мы не можем легко достать фото снова.
-        # Поэтому в этом примере мы просто публикуем текст из подписи сообщения админа.
-        # Для полноценной работы нужно сохранять фото в файловую систему или базу данных.
-        
         original_caption = callback.message.caption
         
         # Удаляем кнопки и ставим статус
@@ -137,7 +138,7 @@ async def approve_post(callback: types.CallbackQuery):
         try:
             await bot.send_photo(
                 chat_id=CHANNEL_USERNAME,
-                photo=callback.message.photo[-1].file_id, # Пересылаем фото из сообщения админа
+                photo=callback.message.photo[-1].file_id,
                 caption=original_caption,
                 parse_mode="HTML"
             )
@@ -162,7 +163,8 @@ async def reject_post(callback: types.CallbackQuery):
         return
 
     try:
-        post_id = int(callback.data.split("_", 1)) [1](https://tr-page.yandex.ru/translate?lang=en-ru&url=https%3A%2F%2Fwww.geeksforgeeks.org%2Fpython%2Fkeyboard-buttons-in-telegram-bot-using-python%2F)
+        # ИСПРАВЛЕНИЕ ОШИБКИ: берем элемент с индексом 1 из списка split
+        post_id = int(callback.data.split("_", 1))
         logging.info(f"Отклонение поста ID: {post_id}")
 
         original_caption = callback.message.caption
@@ -180,6 +182,9 @@ async def reject_post(callback: types.CallbackQuery):
 
 # --- ЗАПУСК ---
 async def main():
+    if not BOT_TOKEN:
+        logging.error("Не удалось запустить бота: токен не установлен.")
+        return
     logging.info("Бот запускается...")
     await dp.start_polling(bot)
 
