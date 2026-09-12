@@ -85,12 +85,6 @@ async def process_caption(message: types.Message, state: FSMContext):
         return
 
     # Формируем чернов
-OLXTOTO | Referensi Bandar Togel Online & Paito SDY Akurat
-OLXTOTO | Referensi Bandar Togel Online & Paito SDY Akurat
-www.franklinspaine.com
-
-
-ик сообщения для админа
     draft_message = (
         f"<b>Новый пост на проверку</b>\n\n"
         f"{caption_text}\n\n"
@@ -182,9 +176,6 @@ async def channel_rating_callback(callback: types.CallbackQuery):
     
     # Чтобы избежать накрутки, можно проверять статус участника через чат-бота, но это усложнит код.
     # Здесь реализован простой ва
-
-
-риант: голос засчитывается просто по нажатию.
     
     like_count = 0
     dislike_count = 0
