@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 # --- НАСТРОЙКИ ---
-BOT_TOKEN = "NEW_TOKEN_HERE"  # ⚠️ Вставь сюда новый токен!
+BOT_TOKEN = "8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg"  # ⚠️ Вставь сюда новый токен!
 ADMIN_ID = 8764200820         # ⚠️ Замени на свой ID
 CHANNEL_USERNAME = "@VNESHKABRATSK"
 
