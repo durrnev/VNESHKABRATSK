@@ -15,7 +15,7 @@ from aiogram.fsm.context import FSMContext
 # ⚠️ СРОЧНО: замени этот токен на новый, старый скомпрометирован!
 BOT_TOKEN = "8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg" 
 ADMIN_ID = 8764200820  # Вставь сюда свой реальный ID
-CHANNEL_USERNAME = "@VNESHKABRATSK"
+CHANNEL_USERNAME = "VNESHKABRATSK"
 
 CACHE_DIR = Path("cache")
 CACHE_DIR.mkdir(exist_ok=True)
