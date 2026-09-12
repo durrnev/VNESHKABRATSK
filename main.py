@@ -149,7 +149,8 @@ async def text_without_photo(message: types.Message, state: FSMContext):
 async def approve_post(callback: types.CallbackQuery):
     logging.info(f"Запрос на одобрение от {callback.from_user.id}")
     try:
-        post_id = int(callback.data.split("_", 1))
+        # ИСПРАВЛЕНО: берём второй элемент после split
+        post_id = int(callback.data.split("_", 1)[1])
     except (ValueError, IndexError):
         await callback.answer("Некорректный ID поста.", show_alert=True)
         return
@@ -183,7 +184,7 @@ async def approve_post(callback: types.CallbackQuery):
 
         try:
             await bot.send_message(post_data["user_id"], "✅ Твой пост опубликован!")
-        except:
+        except Exception:
             pass
 
     except Exception as e:
@@ -196,7 +197,8 @@ async def approve_post(callback: types.CallbackQuery):
 async def reject_post(callback: types.CallbackQuery):
     logging.info(f"Запрос на отклонение от {callback.from_user.id}")
     try:
-        post_id = int(callback.data.split("_", 1))
+        # ИСПРАВЛЕНО: берём второй элемент после split
+        post_id = int(callback.data.split("_", 1)[1])
     except (ValueError, IndexError):
         await callback.answer("Некорректный ID поста.", show_alert=True)
         return
@@ -215,7 +217,7 @@ async def reject_post(callback: types.CallbackQuery):
 
     try:
         await bot.send_message(post_data["user_id"], "❌ Твой пост отклонён.")
-    except:
+    except Exception:
         pass
 
     _cleanup_post(post_id, post_data.get("photo_path"))
