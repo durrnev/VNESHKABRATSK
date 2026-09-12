@@ -186,7 +186,7 @@ async def channel_rating_callback(callback: types.CallbackQuery):
     new_button_text = "👍" if action == "rate_like" else "👎"
     
     # Перегенерируем клавиатуру, меняя цвет/дизайн нажатых кнопок нельзя, но можно заблокировать повторное нажатие тем же юзером,
-    # если хранить список проголосовавших. Для простоты оставим возможность менять голос.
+    # если хранить список проголосовавших. Для простоты оставим возможность менять голос.python -m pip install --upgrade pip
     
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👍", callback_data=f"rate_like_{target_msg_id}")],
