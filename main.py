@@ -8,27 +8,16 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 # --- НАСТРОЙКИ ---
-# ВАЖНО: Здесь мы берем значение переменной с именем "BOT_TOKEN".
-# Сам токен (887...uVg) нужно вставить в настройки вашего хостинга в поле "Переменные окружения" (Env Vars).
-# Если вы тестируете локально, создайте файл .env или установите переменную в терминале.
+# Получаем токен из переменных окружения.
+# ВАЖНО: В панели управления хостингом создайте переменную с именем BOT_TOKEN
+# и вставьте туда ваш токен (8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg).
 BOT_TOKEN = os.getenv("8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg")
 
-# ID администратора (ваш цифровой ID)
 ADMIN_ID = 8764200820 
-
-# Юзернейм канала (без @)
 CHANNEL_USERNAME = "VNESHKABRATSK"
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-# Проверка токена перед инициализацией
-if not BOT_TOKEN:
-    logging.error("❌ КРИТИЧЕСКАЯ ОШИБКА: Переменная окружения BOT_TOKEN не найдена!")
-    logging.error("Как исправить: В панели управления хостингом создайте переменную BOT_TOKEN и вставьте туда токен.")
-else:
-    bot = Bot(token=BOT_TOKEN)
-    dp = Dispatcher(storage=MemoryStorage())
 
 # --- МАШИНА СОСТОЯНИЙ (FSM) ---
 class PostCreation(StatesGroup):
@@ -45,7 +34,11 @@ def get_admin_review_keyboard(post_id: int) -> InlineKeyboardMarkup:
     ])
     return keyboard
 
-# --- ХЕНДЛЕРЫ ---
+# --- ИНИЦИАЛИЗАЦИЯ DP И ХЕНДЛЕРЫ ---
+# Мы создаем dp сразу. Если токена нет, бот просто не запустится внутри main(),
+# но синтаксически dp будет определен, и ошибки NameError не будет.
+bot = None
+dp = Dispatcher(storage=MemoryStorage())
 
 @dp.message(CommandStart())
 async def command_start(message: types.Message):
@@ -106,19 +99,14 @@ async def process_caption(message: types.Message, state: FSMContext):
         await message.answer("❌ Произошла ошибка при отправке на модерацию. Попробуйте позже.")
         await state.clear()
 
-# --- ОБРАБОТКА КНОПОК (CALLBACK QUERY) ---
-
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_post(callback: types.CallbackQuery):
-    logging.info(f"Кнопка 'Одобрить' нажата пользователем {callback.from_user.id}")
-    
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ У вас нет прав для модерации!", show_alert=True)
         return
 
     try:
-        # ИСПРАВЛЕНИЕ: берем элемент с индексом 1 из списка split
-        # split("_", 1) возвращает ['approve', '12345'], берем -> '12345'
+        # Исправленная логика извлечения ID
         post_id = int(callback.data.split("_", 1))
         logging.info(f"Одобрение поста ID: {post_id}")
 
@@ -151,14 +139,11 @@ async def approve_post(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data.startswith("reject_"))
 async def reject_post(callback: types.CallbackQuery):
-    logging.info(f"Кнопка 'Отклонить' нажата пользователем {callback.from_user.id}")
-
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ У вас нет прав для модерации!", show_alert=True)
         return
 
     try:
-        # ИСПРАВЛЕНИЕ: аналогично берем ID из callback_data
         post_id = int(callback.data.split("_", 1))
         logging.info(f"Отклонение поста ID: {post_id}")
 
@@ -177,9 +162,15 @@ async def reject_post(callback: types.CallbackQuery):
 
 # --- ЗАПУСК ---
 async def main():
+    global bot
+    
+    # Проверка токена происходит здесь, перед запуском polling
     if not BOT_TOKEN:
-        logging.error("Не удалось запустить бота: токен не установлен.")
+        logging.error("❌ КРИТИЧЕСКАЯ ОШИБКА: Переменная окружения BOT_TOKEN не найдена!")
+        logging.error("Как исправить: В панели управления хостингом создайте переменную BOT_TOKEN и вставьте туда токен.")
         return
+
+    bot = Bot(token=BOT_TOKEN)
     logging.info("Бот запускается...")
     await dp.start_polling(bot)
 
