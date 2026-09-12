@@ -13,32 +13,24 @@ from aiogram.fsm.context import FSMContext
 
 # --- НАСТРОЙКИ ---
 # ⚠️ СРОЧНО: замени этот токен на новый, старый скомпрометирован!
-BOT_TOKEN = "8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg"
-ADMIN_ID = 8764200820
+BOT_TOKEN = "ТВОЙ_НОВЫЙ_ТОКЕН" 
+ADMIN_ID = 8764200820  # Вставь сюда свой реальный ID
 CHANNEL_USERNAME = "@VNESHKABRATSK"
 
-# Папка для кэширования фото
 CACHE_DIR = Path("cache")
 CACHE_DIR.mkdir(exist_ok=True)
 
-# Временное хранилище постов (очищается при перезапуске бота)
-# Структура: {post_id: {"photo_path": str, "caption": str, "user_id": int, "admin_message_id": int}}
 pending_posts: dict = {}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
-
-# --- FSM СОСТОЯНИЯ ---
 class PostCreation(StatesGroup):
     waiting_for_photo = State()
     waiting_for_caption = State()
 
-
-# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 async def download_photo(bot: Bot, file_id: str, save_path: Path) -> bool:
-    """Скачивает фото по file_id и сохраняет в save_path. Возвращает True при успехе."""
     try:
         file = await bot.get_file(file_id)
         await bot.download_file(file.file_path, save_path)
@@ -46,7 +38,6 @@ async def download_photo(bot: Bot, file_id: str, save_path: Path) -> bool:
     except Exception as e:
         logging.error(f"Ошибка скачивания фото: {e}")
         return False
-
 
 def get_admin_review_keyboard(post_id: int) -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -56,7 +47,6 @@ def get_admin_review_keyboard(post_id: int) -> InlineKeyboardMarkup:
         ]
     ])
     return keyboard
-
 
 def get_channel_rating_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -68,21 +58,15 @@ def get_channel_rating_keyboard() -> InlineKeyboardMarkup:
     ])
     return keyboard
 
-
-# --- ХЭНДЛЕРЫ ---
-
 @dp.message(CommandStart())
 async def command_start(message: types.Message):
     await message.answer(
-        "👋 Привет! Я бот для анонимной отправки постов во 'ВНЕШКА БРАТСК'.\n\n"
-        "Правила:\n"
-        "1. Отправь мне фото человека.\n"
-        "2. Напиши краткое описание.\n"
-        "3. Участники оценят внешность кнопками под постом.\n\n"
-        "*Важно:* Твои данные не сохраняются, а посты публикуются только после проверки администратором.",
+        "👋 Привет! Я бот для анонимной отправки постов.\n\n"
+        "1. Отправь фото.\n"
+        "2. Напиши описание.\n"
+        "3. Админ проверит, и пост уйдет в канал.",
         parse_mode="Markdown",
     )
-
 
 @dp.message(F.text.casefold() == "/cancel")
 async def cancel_handler(message: types.Message, state: FSMContext):
@@ -92,30 +76,24 @@ async def cancel_handler(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("🚫 Создание поста отменено.")
 
-
 @dp.message(F.photo)
 async def handle_photo_start(message: types.Message, state: FSMContext):
-    # Если пользователь уже в процессе создания поста
     if await state.get_state() is not None:
         await message.answer("Вы уже создаёте пост. Сначала завершите его или введите /cancel.")
         return
 
-    photo = message.photo[-1]  # Берем фото наилучшего качества
+    photo = message.photo[-1]
     file_id = photo.file_id
-
-    # Генерируем уникальное имя файла
     unique_name = f"{int(datetime.now().timestamp())}_{message.from_user.id}_{message.message_id}.jpg"
     save_path = CACHE_DIR / unique_name
 
-    # Скачиваем фото в кэш
     if not await download_photo(bot, file_id, save_path):
         await message.answer("❌ Не удалось сохранить фото. Попробуйте ещё раз.")
         return
 
     await state.update_data(photo_file_id=file_id, photo_path=str(save_path))
     await state.set_state(PostCreation.waiting_for_caption)
-    await message.answer("Фото принято. Теперь напиши текст к посту (описание внешности).")
-
+    await message.answer("Фото принято. Теперь напиши текст к посту.")
 
 @dp.message(PostCreation.waiting_for_caption)
 async def process_caption(message: types.Message, state: FSMContext):
@@ -125,7 +103,7 @@ async def process_caption(message: types.Message, state: FSMContext):
 
     if not photo_path or not os.path.exists(photo_path):
         await state.clear()
-        await message.answer("Ошибка: файл фото не найден. Попробуй отправить фото ещё раз.")
+        await message.answer("Ошибка: файл фото не найден. Попробуй сначала отправить фото.")
         return
 
     draft_message = (
@@ -137,7 +115,6 @@ async def process_caption(message: types.Message, state: FSMContext):
     post_id = message.message_id
 
     try:
-        # Отправляем фото админу из локального кэша
         sent_msg = await bot.send_photo(
             chat_id=ADMIN_ID,
             photo=FSInputFile(photo_path),
@@ -146,7 +123,6 @@ async def process_caption(message: types.Message, state: FSMContext):
             parse_mode="HTML",
         )
 
-        # Сохраняем данные поста во временное хранилище
         pending_posts[post_id] = {
             "photo_path": photo_path,
             "caption": caption_text,
@@ -154,96 +130,81 @@ async def process_caption(message: types.Message, state: FSMContext):
             "admin_message_id": sent_msg.message_id,
         }
 
-        await message.answer("✅ Фото и описание отправлены на модерацию. Ожидайте решения администратора.")
+        await message.answer("✅ Фото и описание отправлены на модерацию.")
     except Exception as e:
         logging.error(f"Ошибка отправки поста админу: {e}")
         await message.answer("❌ Произошла ошибка при отправке на модерацию. Попробуй позже.")
 
     await state.clear()
 
-
-# ИСПРАВЛЕННЫЙ ХЭНДЛЕР: обрабатывает обычный текст, если пользователь НЕ в состоянии ожидания подписи
 @dp.message(~F.photo & ~F.text.startswith("/"))
 async def text_without_photo(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
-    
-    # Если пользователь в состоянии ожидания подписи, этот текст обработает хэндлер process_caption
     if current_state == PostCreation.waiting_for_caption:
         return
+    await message.answer("Сначала отправьте фотографию человека.")
 
-    await message.answer("Сначала отправьте фотографию человека, чтобы начать создание поста.")
+# --- ИСПРАВЛЕННЫЕ ХЭНДЛЕРЫ КНОПОК ---
 
-
-# --- CALLBACK: ОДОБРЕНИЕ ---
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_post(callback: types.CallbackQuery):
+    logging.info(f"Запрос на одобрение от {callback.from_user.id}")
     try:
-        post_id = int(callback.data.split("_"))
-    except ValueError:
-        await callback.answer("Некорректный ID поста.")
+        post_id = int(callback.data.split("_", 1)) [1](https://community.latenode.com/t/telegram-bot-in-nodejs-not-responding-to-inline-keyboard-clicks/14207)
+    except (ValueError, IndexError):
+        await callback.answer("Некорректный ID поста.", show_alert=True)
         return
 
     post_data = pending_posts.get(post_id)
-
     if not post_data:
-        await callback.answer("Пост не найден в памяти. Возможно, бот был перезапущен.")
+        await callback.answer("Пост не найден в памяти.", show_alert=True)
         return
 
     photo_path = post_data["photo_path"]
-    caption = post_data["caption"]
-
     if not os.path.exists(photo_path):
-        await callback.answer("Файл фото не найден на диске.")
+        await callback.answer("Файл фото не найден.", show_alert=True)
+        _cleanup_post(post_id, photo_path)
         return
-
-    channel_message = f"{caption}\n\n#ВНЕШКАБРАТСК"
 
     try:
         await bot.send_photo(
             chat_id=CHANNEL_USERNAME,
             photo=FSInputFile(photo_path),
-            caption=channel_message,
+            caption=f"{post_data['caption']}\n\n#ВНЕШКАБРАТСК",
             reply_markup=get_channel_rating_keyboard(),
             parse_mode="HTML",
         )
 
         await callback.message.edit_caption(
-            caption=callback.message.caption + "\n\n✅ <b>Статус: Одобрено и опубликовано в канал</b>",
+            caption=callback.message.caption + "\n\n✅ <b>Статус: Одобрено и опубликовано</b>",
             reply_markup=None,
             parse_mode="HTML",
         )
-        await callback.answer("Пост одобрен и опубликован!")
+        await callback.answer("Пост опубликован!")
 
-        # Уведомляем отправителя
         try:
-            await bot.send_message(
-                post_data["user_id"],
-                "✅ Твой пост одобрен и опубликован в канале!",
-            )
-        except Exception:
-            pass  # Пользователь мог заблокировать бота
+            await bot.send_message(post_data["user_id"], "✅ Твой пост опубликован!")
+        except:
+            pass
 
     except Exception as e:
-        logging.error(f"Ошибка публикации в канал: {e}")
-        await callback.answer("Ошибка при публикации в канал. Проверь, добавлен ли бот в админы канала.")
+        logging.error(f"Ошибка публикации: {e}")
+        await callback.answer(f"Ошибка публикации: {str(e)}", show_alert=True)
 
-    # Удаляем фото из кэша и из памяти
     _cleanup_post(post_id, photo_path)
 
-
-# --- CALLBACK: ОТКЛОНЕНИЕ ---
 @dp.callback_query(F.data.startswith("reject_"))
 async def reject_post(callback: types.CallbackQuery):
+    logging.info(f"Запрос на отклонение от {callback.from_user.id}")
     try:
-        post_id = int(callback.data.split("_"))
-    except ValueError:
-        await callback.answer("Некорректный ID поста.")
+        post_id = int(callback.data.split("_", 1)) [1](https://community.latenode.com/t/telegram-bot-in-nodejs-not-responding-to-inline-keyboard-clicks/14207)
+    except (ValueError, IndexError):
+        await callback.answer("Некорректный ID поста.", show_alert=True)
         return
 
     post_data = pending_posts.get(post_id)
-
     if not post_data:
-        await callback.answer("Пост не найден в памяти. Возможно, бот был перезапущен.")
+        await callback.answer("Пост не найден в памяти.", show_alert=True)
         return
 
     await callback.message.edit_caption(
@@ -253,34 +214,21 @@ async def reject_post(callback: types.CallbackQuery):
     )
     await callback.answer("Пост отклонён.")
 
-    # Уведомляем отправителя
     try:
-        await bot.send_message(
-            post_data["user_id"],
-            "❌ Твой пост отклонён администратором.",
-        )
-    except Exception:
+        await bot.send_message(post_data["user_id"], "❌ Твой пост отклонён.")
+    except:
         pass
 
-    # Удаляем фото из кэша и из памяти
-    photo_path = post_data.get("photo_path")
-    _cleanup_post(post_id, photo_path)
-
+    _cleanup_post(post_id, post_data.get("photo_path"))
 
 def _cleanup_post(post_id: int, photo_path: str | None):
-    """Вспомогательная функция для очистки кэша и хранилища."""
-    # Удаляем файл с диска
     if photo_path and os.path.exists(photo_path):
         try:
             os.remove(photo_path)
         except Exception as e:
-            logging.warning(f"Не удалось удалить файл {photo_path}: {e}")
-    
-    # Удаляем запись из словаря
+            logging.warning(f"Не удалось удалить файл: {e}")
     pending_posts.pop(post_id, None)
 
-
-# --- РЕЙТИНГ В КАНАЛЕ ---
 @dp.callback_query(F.data.startswith("rating_"))
 async def handle_rating(callback: types.CallbackQuery):
     rating_map = {
@@ -291,15 +239,10 @@ async def handle_rating(callback: types.CallbackQuery):
     choice = rating_map.get(callback.data)
     if choice:
         await callback.answer(f"Ты оценил: {choice}")
-    else:
-        await callback.answer("Неизвестная оценка")
 
-
-# --- ЗАПУСК ---
 async def main():
     logging.info("Бот запущен.")
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
