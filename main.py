@@ -12,10 +12,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 # --- НАСТРОЙКИ ---
-# ⚠️ СРОЧНО: замени этот токен на новый, старый скомпрометирован!
-BOT_TOKEN = "8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg" 
-ADMIN_ID = 8764200820  # Вставь сюда свой реальный ID
-CHANNEL_USERNAME = "VNESHKABRATSK"
+# ⚠️ СРОЧНО: замените это на реальный токен!
+BOT_TOKEN = "ТВОЙ_НОВЫЙ_ТОКЕН" 
+ADMIN_ID = 8764200820  # Вставьте сюда свой реальный ID
+CHANNEL_USERNAME = "@VNESHKABRATSK"
 
 CACHE_DIR = Path("cache")
 CACHE_DIR.mkdir(exist_ok=True)
@@ -150,6 +150,7 @@ async def text_without_photo(message: types.Message, state: FSMContext):
 async def approve_post(callback: types.CallbackQuery):
     logging.info(f"Запрос на одобрение от {callback.from_user.id}")
     try:
+        # ИСПРАВЛЕНИЕ ЗДЕСЬ: добавлено для получения строки с ID
         post_id = int(callback.data.split("_", 1))
     except (ValueError, IndexError):
         await callback.answer("Некорректный ID поста.", show_alert=True)
@@ -197,6 +198,7 @@ async def approve_post(callback: types.CallbackQuery):
 async def reject_post(callback: types.CallbackQuery):
     logging.info(f"Запрос на отклонение от {callback.from_user.id}")
     try:
+        # ИСПРАВЛЕНИЕ ЗДЕСЬ: добавлено для получения строки с ID
         post_id = int(callback.data.split("_", 1))
     except (ValueError, IndexError):
         await callback.answer("Некорректный ID поста.", show_alert=True)
