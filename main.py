@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 # ВАЖНО: Здесь мы берем значение переменной с именем "BOT_TOKEN".
 # Сам токен (887...uVg) нужно вставить в настройки вашего хостинга в поле "Переменные окружения" (Env Vars).
 # Если вы тестируете локально, создайте файл .env или установите переменную в терминале.
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg")
 
 # ID администратора (ваш цифровой ID)
 ADMIN_ID = 8764200820 
