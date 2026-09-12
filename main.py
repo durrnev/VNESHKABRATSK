@@ -150,7 +150,7 @@ async def text_without_photo(message: types.Message, state: FSMContext):
 async def approve_post(callback: types.CallbackQuery):
     logging.info(f"Запрос на одобрение от {callback.from_user.id}")
     try:
-        post_id = int(callback.data.split("_", 1)) [1](https://community.latenode.com/t/telegram-bot-in-nodejs-not-responding-to-inline-keyboard-clicks/14207)
+        post_id = int(callback.data.split("_", 1))
     except (ValueError, IndexError):
         await callback.answer("Некорректный ID поста.", show_alert=True)
         return
@@ -197,7 +197,7 @@ async def approve_post(callback: types.CallbackQuery):
 async def reject_post(callback: types.CallbackQuery):
     logging.info(f"Запрос на отклонение от {callback.from_user.id}")
     try:
-        post_id = int(callback.data.split("_", 1)) [1](https://community.latenode.com/t/telegram-bot-in-nodejs-not-responding-to-inline-keyboard-clicks/14207)
+        post_id = int(callback.data.split("_", 1))
     except (ValueError, IndexError):
         await callback.answer("Некорректный ID поста.", show_alert=True)
         return
