@@ -13,7 +13,7 @@ from aiogram.fsm.context import FSMContext
 
 # --- НАСТРОЙКИ ---
 # ⚠️ СРОЧНО: замените это на реальный токен!
-BOT_TOKEN = "ТВОЙ_НОВЫЙ_ТОКЕН" 
+BOT_TOKEN = "8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg" 
 ADMIN_ID = 8764200820  # Вставьте сюда свой реальный ID
 CHANNEL_USERNAME = "VNESHKABRATSK"
 
