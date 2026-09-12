@@ -12,14 +12,17 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 # --- НАСТРОЙКИ ---
-BOT_TOKEN = "ТВОЙ_НОВЫЙ_ТОКЕН" 
+BOT_TOKEN = "ТВОЙ_НОВЫЙ_ТОКЕН"  # ВСТАВЬТЕ ТОКЕН
 ADMIN_ID = 8764200820
 CHANNEL_USERNAME = "VNESHKABRATSK"
 
 CACHE_DIR = Path("cache")
 CACHE_DIR.mkdir(exist_ok=True)
 
+# Хранилище постов: {post_internal_id: data}
 pending_posts: dict = {}
+# Счетчик для генерации уникальных ID постов (не сбрасывается при перезапуске FSM, но сбросится при рестарте бота)
+next_post_id = 1 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 bot = Bot(token=BOT_TOKEN)
@@ -96,6 +99,8 @@ async def handle_photo_start(message: types.Message, state: FSMContext):
 
 @dp.message(PostCreation.waiting_for_caption)
 async def process_caption(message: types.Message, state: FSMContext):
+    global next_post_id
+    
     caption_text = message.text.strip()
     data = await state.get_data()
     photo_path = data.get("photo_path")
@@ -111,18 +116,22 @@ async def process_caption(message: types.Message, state: FSMContext):
         f"Отправитель: <code>{message.from_user.id}</code>"
     )
 
-    post_id = message.message_id
+    # --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+    # Используем свой уникальный ID, а не message.message_id
+    current_post_id = next_post_id
+    next_post_id += 1
+    # -------------------------
 
     try:
         sent_msg = await bot.send_photo(
             chat_id=ADMIN_ID,
             photo=FSInputFile(photo_path),
             caption=draft_message,
-            reply_markup=get_admin_review_keyboard(post_id),
+            reply_markup=get_admin_review_keyboard(current_post_id),
             parse_mode="HTML",
         )
 
-        pending_posts[post_id] = {
+        pending_posts[current_post_id] = {
             "photo_path": photo_path,
             "caption": caption_text,
             "user_id": message.from_user.id,
@@ -143,26 +152,28 @@ async def text_without_photo(message: types.Message, state: FSMContext):
         return
     await message.answer("Сначала отправьте фотографию человека.")
 
-# --- ИСПРАВЛЕННЫЕ ХЭНДЛЕРЫ КНОПОК ---
+# --- ХЭНДЛЕРЫ КНОПОК ---
 
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_post(callback: types.CallbackQuery):
     logging.info(f"Запрос на одобрение от {callback.from_user.id}")
     try:
-        # ИСПРАВЛЕНО: берём второй элемент после split
-        post_id = int(callback.data.split("_", 1)[1])
+        post_id = int(callback.data.split("_", 1)) [1](https://docs.aiogram.dev/en/latest/dispatcher/finite_state_machine/storages.html)
     except (ValueError, IndexError):
         await callback.answer("Некорректный ID поста.", show_alert=True)
         return
 
     post_data = pending_posts.get(post_id)
+    
+    # ПРОВЕРКА: Если поста нет
     if not post_data:
-        await callback.answer("Пост не найден в памяти.", show_alert=True)
+        logging.warning(f"Попытка одобрения несуществующего поста ID: {post_id}")
+        await callback.answer("❌ Пост не найден в памяти. Возможно, бот был перезапущен.", show_alert=True)
         return
 
     photo_path = post_data["photo_path"]
     if not os.path.exists(photo_path):
-        await callback.answer("Файл фото не найден.", show_alert=True)
+        await callback.answer("Файл фото не найден на диске.", show_alert=True)
         _cleanup_post(post_id, photo_path)
         return
 
@@ -197,15 +208,17 @@ async def approve_post(callback: types.CallbackQuery):
 async def reject_post(callback: types.CallbackQuery):
     logging.info(f"Запрос на отклонение от {callback.from_user.id}")
     try:
-        # ИСПРАВЛЕНО: берём второй элемент после split
-        post_id = int(callback.data.split("_", 1)[1])
+        post_id = int(callback.data.split("_", 1)) [1](https://docs.aiogram.dev/en/latest/dispatcher/finite_state_machine/storages.html)
     except (ValueError, IndexError):
         await callback.answer("Некорректный ID поста.", show_alert=True)
         return
 
     post_data = pending_posts.get(post_id)
+    
+    # ПРОВЕРКА: Если поста нет
     if not post_data:
-        await callback.answer("Пост не найден в памяти.", show_alert=True)
+        logging.warning(f"Попытка отклонения несуществующего поста ID: {post_id}")
+        await callback.answer("❌ Пост не найден в памяти. Возможно, бот был перезапущен.", show_alert=True)
         return
 
     await callback.message.edit_caption(
@@ -229,6 +242,7 @@ def _cleanup_post(post_id: int, photo_path: str | None):
         except Exception as e:
             logging.warning(f"Не удалось удалить файл: {e}")
     pending_posts.pop(post_id, None)
+    logging.info(f"Пост {post_id} удален из памяти и диска.")
 
 @dp.callback_query(F.data.startswith("rating_"))
 async def handle_rating(callback: types.CallbackQuery):
