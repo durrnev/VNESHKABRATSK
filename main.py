@@ -1,28 +1,31 @@
 import os
 import logging
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 # --- НАСТРОЙКИ ---
-# Токен берем из переменных окружения (это решит ошибку Token is invalid)
-BOT_TOKEN = os.getenv("8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg")
+# ВАЖНО: Здесь мы берем значение переменной с именем "BOT_TOKEN".
+# Сам токен (887...uVg) нужно вставить в настройки вашего хостинга в поле "Переменные окружения" (Env Vars).
+# Если вы тестируете локально, создайте файл .env или установите переменную в терминале.
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# ВАЖНО: Замените на ваш цифровой ID (можно узнать у бота @userinfobot)
+# ID администратора (ваш цифровой ID)
 ADMIN_ID = 8764200820 
 
-# Юзернейм канала (без @), куда будут публиковаться посты
+# Юзернейм канала (без @)
 CHANNEL_USERNAME = "VNESHKABRATSK"
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Инициализация бота и диспетчера
+# Проверка токена перед инициализацией
 if not BOT_TOKEN:
-    logging.error("❌ ОШИБКА: Переменная окружения BOT_TOKEN не найдена! Бот не запустится.")
+    logging.error("❌ КРИТИЧЕСКАЯ ОШИБКА: Переменная окружения BOT_TOKEN не найдена!")
+    logging.error("Как исправить: В панели управления хостингом создайте переменную BOT_TOKEN и вставьте туда токен.")
 else:
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
@@ -34,7 +37,6 @@ class PostCreation(StatesGroup):
 
 # --- КЛАВИАТУРЫ ---
 def get_admin_review_keyboard(post_id: int) -> InlineKeyboardMarkup:
-    """Создает клавиатуру с кнопками Одобрить/Отклонить"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="✅ Одобрить", callback_data=f"approve_{post_id}"),
@@ -43,7 +45,7 @@ def get_admin_review_keyboard(post_id: int) -> InlineKeyboardMarkup:
     ])
     return keyboard
 
-# --- ХЕНДЛЕРЫ (ОБРАБОТЧИКИ) ---
+# --- ХЕНДЛЕРЫ ---
 
 @dp.message(CommandStart())
 async def command_start(message: types.Message):
@@ -52,15 +54,22 @@ async def command_start(message: types.Message):
         "Отправь мне фото, чтобы начать модерацию."
     )
 
+@dp.message(Command("cancel"))
+async def cancel_handler(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        return
+    await state.clear()
+    await message.answer("❌ Создание поста отменено.")
+
 @dp.message(F.photo)
 async def handle_photo_start(message: types.Message, state: FSMContext):
-    # Если пользователь уже в процессе создания поста
     current_state = await state.get_state()
     if current_state is not None:
         await message.answer("Вы уже создаете пост. Сначала завершите его или напишите /cancel.")
         return
 
-    photo = message.photo[-1]  # Берем фото наилучшего качества
+    photo = message.photo[-1]
     await state.update_data(photo_file_id=photo.file_id)
     await state.set_state(PostCreation.waiting_for_caption)
     await message.answer("Фото принято! Теперь напишите текст описания к посту.")
@@ -76,7 +85,6 @@ async def process_caption(message: types.Message, state: FSMContext):
         await message.answer("Произошла ошибка. Начните заново с отправки фото.")
         return
 
-    # Формируем сообщение для админа
     draft_text = (
         f"<b>📨 Новый пост на проверку</b>\n\n"
         f"{caption_text}\n\n"
@@ -84,13 +92,11 @@ async def process_caption(message: types.Message, state: FSMContext):
     )
 
     try:
-        # Отправляем пост админу с кнопками
-        # Используем ID сообщения юзера как ID поста для простоты
-        sent_msg = await bot.send_photo(
+        await bot.send_photo(
             chat_id=ADMIN_ID,
             photo=photo_file_id,
             caption=draft_text,
-            reply_markup=get_admin_review_keyboard(message.message_id), 
+            reply_markup=get_admin_review_keyboard(message.message_id),
             parse_mode="HTML"
         )
         await message.answer("✅ Ваш пост отправлен на модерацию администратору.")
@@ -100,41 +106,30 @@ async def process_caption(message: types.Message, state: FSMContext):
         await message.answer("❌ Произошла ошибка при отправке на модерацию. Попробуйте позже.")
         await state.clear()
 
-@dp.message(CommandStart())
-async def cancel_handler(message: types.Message, state: FSMContext):
-    current_state = await state.get_state()
-    if current_state is None:
-        return
-    await state.clear()
-    await message.answer("❌ Создание поста отменено.")
-
 # --- ОБРАБОТКА КНОПОК (CALLBACK QUERY) ---
 
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_post(callback: types.CallbackQuery):
     logging.info(f"Кнопка 'Одобрить' нажата пользователем {callback.from_user.id}")
     
-    # Проверка прав администратора
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("❌ У вас нет прав для модерации!", show_alert=True)
         return
 
     try:
-        # ИСПРАВЛЕНИЕ ОШИБКИ: берем элемент с индексом 1 из списка split
-        # callback.data выглядит как "approve_12345", split возвращает ["approve", "12345"]
+        # ИСПРАВЛЕНИЕ: берем элемент с индексом 1 из списка split
+        # split("_", 1) возвращает ['approve', '12345'], берем -> '12345'
         post_id = int(callback.data.split("_", 1))
         logging.info(f"Одобрение поста ID: {post_id}")
 
         original_caption = callback.message.caption
         
-        # Удаляем кнопки и ставим статус
         await callback.message.edit_caption(
             caption=f"{original_caption}\n\n✅ <b>Статус: Одобрено и опубликовано</b>",
             reply_markup=None,
             parse_mode="HTML"
         )
 
-        # Публикация в канал
         try:
             await bot.send_photo(
                 chat_id=CHANNEL_USERNAME,
@@ -163,7 +158,7 @@ async def reject_post(callback: types.CallbackQuery):
         return
 
     try:
-        # ИСПРАВЛЕНИЕ ОШИБКИ: берем элемент с индексом 1 из списка split
+        # ИСПРАВЛЕНИЕ: аналогично берем ID из callback_data
         post_id = int(callback.data.split("_", 1))
         logging.info(f"Отклонение поста ID: {post_id}")
 
