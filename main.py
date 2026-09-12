@@ -7,13 +7,13 @@ from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from aiogram.types import FSInputFile
 
 # --- НАСТРОЙКИ ---
-BOT_TOKEN = "8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg"  # ⚠️ Замени на новый токен!
+# ⚠️ СРОЧНО: замени этот токен на новый, старый скомпрометирован!
+BOT_TOKEN = "8870850351:AAFkim_yrVbzm0Hm29qMsGMfL-aQr0mbuVg"
 ADMIN_ID = 8764200820
 CHANNEL_USERNAME = "@VNESHKABRATSK"
 
@@ -21,10 +21,11 @@ CHANNEL_USERNAME = "@VNESHKABRATSK"
 CACHE_DIR = Path("cache")
 CACHE_DIR.mkdir(exist_ok=True)
 
-# Временное хранилище: {post_id: {"photo_path": str, "caption": str, "user_id": int}}
+# Временное хранилище постов (очищается при перезапуске бота)
+# Структура: {post_id: {"photo_path": str, "caption": str, "user_id": int, "admin_message_id": int}}
 pending_posts: dict = {}
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
@@ -94,16 +95,19 @@ async def cancel_handler(message: types.Message, state: FSMContext):
 
 @dp.message(F.photo)
 async def handle_photo_start(message: types.Message, state: FSMContext):
+    # Если пользователь уже в процессе создания поста
     if await state.get_state() is not None:
         await message.answer("Вы уже создаёте пост. Сначала завершите его или введите /cancel.")
         return
 
-    photo = message.photo[-1]
+    photo = message.photo[-1]  # Берем фото наилучшего качества
     file_id = photo.file_id
 
+    # Генерируем уникальное имя файла
     unique_name = f"{int(datetime.now().timestamp())}_{message.from_user.id}_{message.message_id}.jpg"
     save_path = CACHE_DIR / unique_name
 
+    # Скачиваем фото в кэш
     if not await download_photo(bot, file_id, save_path):
         await message.answer("❌ Не удалось сохранить фото. Попробуйте ещё раз.")
         return
@@ -133,6 +137,7 @@ async def process_caption(message: types.Message, state: FSMContext):
     post_id = message.message_id
 
     try:
+        # Отправляем фото админу из локального кэша
         sent_msg = await bot.send_photo(
             chat_id=ADMIN_ID,
             photo=FSInputFile(photo_path),
@@ -157,15 +162,27 @@ async def process_caption(message: types.Message, state: FSMContext):
     await state.clear()
 
 
-@dp.message(~F.photo & ~F.text.startswith("/") & ~PostCreation.waiting_for_caption)
-async def text_without_photo(message: types.Message):
+# ИСПРАВЛЕННЫЙ ХЭНДЛЕР: обрабатывает обычный текст, если пользователь НЕ в состоянии ожидания подписи
+@dp.message(~F.photo & ~F.text.startswith("/"))
+async def text_without_photo(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    
+    # Если пользователь в состоянии ожидания подписи, этот текст обработает хэндлер process_caption
+    if current_state == PostCreation.waiting_for_caption:
+        return
+
     await message.answer("Сначала отправьте фотографию человека, чтобы начать создание поста.")
 
 
 # --- CALLBACK: ОДОБРЕНИЕ ---
 @dp.callback_query(F.data.startswith("approve_"))
 async def approve_post(callback: types.CallbackQuery):
-    post_id = int(callback.data.split("_")[1])
+    try:
+        post_id = int(callback.data.split("_"))
+    except ValueError:
+        await callback.answer("Некорректный ID поста.")
+        return
+
     post_data = pending_posts.get(post_id)
 
     if not post_data:
@@ -210,20 +227,19 @@ async def approve_post(callback: types.CallbackQuery):
         logging.error(f"Ошибка публикации в канал: {e}")
         await callback.answer("Ошибка при публикации в канал. Проверь, добавлен ли бот в админы канала.")
 
-    # Удаляем фото из кэша
-    try:
-        os.remove(photo_path)
-    except Exception as e:
-        logging.warning(f"Не удалось удалить файл {photo_path}: {e}")
-
-    # Удаляем из временного хранилища
-    pending_posts.pop(post_id, None)
+    # Удаляем фото из кэша и из памяти
+    _cleanup_post(post_id, photo_path)
 
 
 # --- CALLBACK: ОТКЛОНЕНИЕ ---
 @dp.callback_query(F.data.startswith("reject_"))
 async def reject_post(callback: types.CallbackQuery):
-    post_id = int(callback.data.split("_")[1])
+    try:
+        post_id = int(callback.data.split("_"))
+    except ValueError:
+        await callback.answer("Некорректный ID поста.")
+        return
+
     post_data = pending_posts.get(post_id)
 
     if not post_data:
@@ -246,14 +262,21 @@ async def reject_post(callback: types.CallbackQuery):
     except Exception:
         pass
 
-    # Удаляем фото из кэша
+    # Удаляем фото из кэша и из памяти
     photo_path = post_data.get("photo_path")
+    _cleanup_post(post_id, photo_path)
+
+
+def _cleanup_post(post_id: int, photo_path: str | None):
+    """Вспомогательная функция для очистки кэша и хранилища."""
+    # Удаляем файл с диска
     if photo_path and os.path.exists(photo_path):
         try:
             os.remove(photo_path)
         except Exception as e:
             logging.warning(f"Не удалось удалить файл {photo_path}: {e}")
-
+    
+    # Удаляем запись из словаря
     pending_posts.pop(post_id, None)
 
 
